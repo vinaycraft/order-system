@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paratha Order Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .menu-item {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            transition: transform 0.2s;
+            background: white;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .menu-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .menu-item img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 6px;
+            margin-bottom: 15px;
+        }
+        .menu-item h5 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+        .menu-item p {
+            color: #666;
+            flex-grow: 1;
+        }
+        .menu-item .price {
+            font-size: 1.2em;
+            color: #2ecc71;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .cart-item {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .quantity-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .quantity-control button {
+            padding: 5px 10px;
+            border: none;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .quantity-control button:hover {
+            background: #e9ecef;
+        }
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            padding-top: 20px;
+        }
+        .cart-card {
+            position: sticky;
+            top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">Paratha Order System</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="#" id="menuTab">Menu</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#" id="ordersTab">My Orders</a>
+                    </li>
+                </ul>
+                <div class="d-flex align-items-center">
+                    <span class="text-light me-3" id="userInfo"></span>
+                    <button class="btn btn-outline-light" id="logoutBtn">Logout</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- Menu Section -->
+        <div id="menuSection">
+            <div class="row">
+                <div class="col-md-8">
+                    <h2>Menu</h2>
+                    <div class="row" id="menuItems"></div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card cart-card">
+                        <div class="card-header">
+                            <h3>Cart</h3>
+                        </div>
+                        <div class="card-body">
+                            <div id="cartItems"></div>
+                            <div class="mt-3">
+                                <h5>Total: ₹<span id="cartTotal">0</span></h5>
+                                <button class="btn btn-primary w-100" id="placeOrderBtn">Place Order</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Orders Section -->
+        <div id="ordersSection" style="display: none;">
+            <h2>My Orders</h2>
+            <div id="ordersList"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Global variables
+        let cart = {};
+        let menuItems = [];
+        const API_BASE_URL = '/api';
+
+        // Check authentication on page load
+        function checkAuth() {
+            const token = localStorage.getItem('token');
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            
+            if (!token) {
+                console.log('No token found, redirecting to login');
+                window.location.replace('/login.html');
+                return;
+            }
+
+            // If user is a manager/admin, redirect to manager dashboard
+            if (user && user.role && ['manager', 'admin'].includes(user.role)) {
+                console.log('Manager/admin detected, redirecting to manager dashboard');
+                window.location.replace('/manager-dashboard.html');
+                return;
+            }
+
+            // If we get here, the user is authenticated and is a customer
+            console.log('Customer authenticated:', user);
+            document.getElementById('userInfo').textContent = user.name || 'Customer';
+        }
+
+        // Initialize page
+        async function initializePage() {
+            try {
+                // First get CSRF cookie
+                await fetch('/sanctum/csrf-cookie', {
+                    credentials: 'include'
+                });
+
+                // Check authentication
+                checkAuth();
+
+                // Load initial data
+                await loadMenuItems();
+                await loadOrders();
+
+                // Set up refresh intervals
+                setInterval(loadOrders, 30000); // Refresh orders every 30 seconds
+            } catch (error) {
+                console.error('Failed to initialize page:', error);
+            }
+        }
+
+        // Logout function
+        async function logout() {
+            try {
+                await fetch(`${API_BASE_URL}/logout`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'include'
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+            } finally {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                window.location.replace('/login.html');
+            }
+        }
+
+        // Add authorization headers to all API requests
+        async function fetchWithAuth(url, options = {}) {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.replace('/login.html');
+                return;
+            }
+
+            const defaultOptions = {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json'
+                },
+                credentials: 'include'
+            };
+
+            return fetch(url, {
+                ...defaultOptions,
+                ...options,
+                headers: {
+                    ...defaultOptions.headers,
+                    ...options.headers
+                }
+            });
+        }
+
+        // Load menu items
+        async function loadMenuItems() {
+            try {
+                console.log('Loading menu items...');
+                const response = await fetchWithAuth(`${API_BASE_URL}/menu-items`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('Menu items response not OK:', response.status, errorText);
+                    throw new Error(`Failed to load menu items: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log('Menu items data:', data);
+
+                if (data.status === 'success' && Array.isArray(data.data)) {
+                    menuItems = data.data;
+                    displayMenuItems();
+                } else {
+                    console.error('Invalid menu items data format:', data);
+                    throw new Error('Invalid menu items data format');
+                }
+            } catch (error) {
+                console.error('Error loading menu items:', error);
+                document.getElementById('menuItems').innerHTML = 
+                    `<div class="col-12 text-center">
+                        <p class="text-danger">Error loading menu items: ${error.message}</p>
+                        <button class="btn btn-primary mt-2" onclick="loadMenuItems()">Retry</button>
+                    </div>`;
+            }
+        }
+
+        // Display menu items
+        function displayMenuItems() {
+            console.log('Displaying menu items:', menuItems);
+            const menuContainer = document.getElementById('menuItems');
+            menuContainer.innerHTML = '';
+
+            if (!menuItems || menuItems.length === 0) {
+                menuContainer.innerHTML = '<div class="col-12 text-center"><p>No menu items available</p></div>';
+                return;
+            }
+
+            menuItems.forEach(item => {
+                const col = document.createElement('div');
+                col.className = 'col-md-6 col-lg-4 mb-4';
+                
+                // Convert price to number and handle formatting
+                const price = parseFloat(item.price);
+                const formattedPrice = isNaN(price) ? '0.00' : price.toFixed(2);
+                
+                col.innerHTML = `
+                    <div class="menu-item">
+                        <img src="${item.image_url || 'https://placehold.co/300x200?text=Paratha+Image'}" 
+                             alt="${item.name}" 
+                             onerror="this.src='https://placehold.co/300x200?text=Paratha+Image'">
+                        <h5>${item.name}</h5>
+                        <p>${item.description || 'No description available'}</p>
+                        <div class="price">₹${formattedPrice}</div>
+                        <button class="btn btn-primary w-100" onclick="addToCart(${item.id})">
+                            Add to Cart
+                        </button>
+                    </div>
+                `;
+                
+                menuContainer.appendChild(col);
+            });
+        }
+
+        // Cart functions
+        function addToCart(itemId) {
+            const item = menuItems.find(i => i.id === itemId);
+            if (!item) return;
+
+            if (cart[itemId]) {
+                cart[itemId].quantity++;
+            } else {
+                cart[itemId] = {
+                    id: item.id,
+                    name: item.name,
+                    price: item.price,
+                    quantity: 1
+                };
+            }
+            updateCartDisplay();
+        }
+
+        function removeFromCart(itemId) {
+            delete cart[itemId];
+            updateCartDisplay();
+        }
+
+        function updateQuantity(itemId, delta) {
+            if (!cart[itemId]) return;
+            
+            cart[itemId].quantity += delta;
+            if (cart[itemId].quantity <= 0) {
+                removeFromCart(itemId);
+            } else {
+                updateCartDisplay();
+            }
+        }
+
+        function updateCartDisplay() {
+            const cartContainer = document.getElementById('cartItems');
+            const cartTotal = document.getElementById('cartTotal');
+            
+            cartContainer.innerHTML = Object.values(cart).map(item => `
+                <div class="cart-item">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6>${item.name}</h6>
+                        <div class="quantity-control">
+                            <button class="btn btn-sm btn-outline-primary" onclick="updateQuantity(${item.id}, -1)">-</button>
+                            <span>${item.quantity}</span>
+                            <button class="btn btn-sm btn-outline-primary" onclick="updateQuantity(${item.id}, 1)">+</button>
+                            <button class="btn btn-sm btn-outline-danger ms-2" onclick="removeFromCart(${item.id})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-end">
+                        ₹${(item.price * item.quantity).toFixed(2)}
+                    </div>
+                </div>
+            `).join('');
+
+            const total = Object.values(cart).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            cartTotal.textContent = total.toFixed(2);
+        }
+
+        // Place order
+        async function placeOrder() {
+            if (Object.keys(cart).length === 0) {
+                alert('Please add items to your cart first');
+                return;
+            }
+
+            try {
+                const orderItems = Object.values(cart).map(item => ({
+                    menu_item_id: item.id,
+                    quantity: item.quantity
+                }));
+
+                const response = await fetchWithAuth(`${API_BASE_URL}/orders`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ items: orderItems })
+                });
+
+                if (!response.ok) throw new Error('Failed to place order');
+
+                const result = await response.json();
+                alert('Order placed successfully!');
+                cart = {};
+                updateCartDisplay();
+                loadOrders();
+            } catch (error) {
+                console.error('Error placing order:', error);
+                alert('Failed to place order. Please try again.');
+            }
+        }
+
+        // Load orders
+        async function loadOrders() {
+            try {
+                const response = await fetchWithAuth(`${API_BASE_URL}/orders`);
+                if (!response.ok) throw new Error('Failed to load orders');
+                
+                const responseData = await response.json();
+                const orders = responseData.data || [];
+                if (!Array.isArray(orders)) throw new Error('Orders data is not an array');
+                displayOrders(orders);
+            } catch (error) {
+                console.error('Error loading orders:', error);
+            }
+        }
+
+        // Display orders
+        function displayOrders(orders) {
+            const ordersContainer = document.getElementById('ordersList');
+            ordersContainer.innerHTML = orders.map(order => `
+                <div class="card mb-3">
+                    <div class="card-header">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h5>Order #${order.id}</h5>
+                            <span class="badge bg-${getStatusBadgeColor(order.status)}">${order.status}</span>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-8">
+                                ${order.order_items.map(item => `
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>${item.menu_item.name} x ${item.quantity}</span>
+                                        <span>₹${item.subtotal}</span>
+                                    </div>
+                                `).join('')}
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <h6>Total: ₹${order.total_amount}</h6>
+                                <small>Ordered on: ${new Date(order.created_at).toLocaleString()}</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function getStatusBadgeColor(status) {
+            const colors = {
+                'pending': 'warning',
+                'preparing': 'info',
+                'ready': 'success',
+                'delivered': 'primary',
+                'cancelled': 'danger'
+            };
+            return colors[status] || 'secondary';
+        }
+
+        // Event listeners
+        document.getElementById('menuTab').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('menuSection').style.display = 'block';
+            document.getElementById('ordersSection').style.display = 'none';
+            this.classList.add('active');
+            document.getElementById('ordersTab').classList.remove('active');
+        });
+
+        document.getElementById('ordersTab').addEventListener('click', function(e) {
+            e.preventDefault();
+            document.getElementById('menuSection').style.display = 'none';
+            document.getElementById('ordersSection').style.display = 'block';
+            this.classList.add('active');
+            document.getElementById('menuTab').classList.remove('active');
+            loadOrders();
+        });
+
+        document.getElementById('placeOrderBtn').addEventListener('click', placeOrder);
+
+        document.getElementById('logoutBtn').addEventListener('click', logout);
+
+        // Initialize the page
+        initializePage();
+    </script>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Paratha Order System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        .register-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 1.5rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #666;
+        }
+        input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .error-message {
+            color: #ff0000;
+            margin-top: 1rem;
+            text-align: center;
+            display: none;
+        }
+        .success-message {
+            color: #4CAF50;
+            margin-top: 1rem;
+            text-align: center;
+            display: none;
+        }
+        .login-link {
+            text-align: center;
+            margin-top: 1rem;
+        }
+        .login-link a {
+            color: #4CAF50;
+            text-decoration: none;
+        }
+        .login-link a:hover {
+            text-decoration: underline;
+        }
+        .error {
+            color: #ff0000;
+            margin-top: 1rem;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="register-container">
+        <h1>Register</h1>
+        <form id="registerForm">
+            <div class="form-group">
+                <label for="name">Name:</label>
+                <input type="text" id="name" required>
+            </div>
+            <div class="form-group">
+                <label for="mobile">Mobile Number:</label>
+                <input type="tel" id="mobile" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" required>
+            </div>
+            <div class="form-group">
+                <label for="confirmPassword">Confirm Password:</label>
+                <input type="password" id="confirmPassword" required>
+            </div>
+            <button type="submit" class="register-btn">Register</button>
+            <div id="error" class="error"></div>
+            <p class="login-link">Already have an account? <a href="login.html">Login here</a></p>
+        </form>
+    </div>
+
+    <script>
+        const API_URL = '/api';
+
+        document.getElementById('registerForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = '';
+
+            const name = document.getElementById('name').value;
+            const mobile = document.getElementById('mobile').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (password !== confirmPassword) {
+                errorDiv.textContent = 'Passwords do not match';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/register`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        name,
+                        mobile,
+                        password,
+                        password_confirmation: confirmPassword,
+                        role: 'customer' // Set default role as customer
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Store the token
+                    localStorage.setItem('token', data.token);
+                    // Redirect to dashboard
+                    window.location.href = '/dashboard.html';
+                } else {
+                    errorDiv.textContent = data.message || 'Registration failed';
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                errorDiv.textContent = 'An error occurred during registration';
+            }
+        });
+    </script>
+</body>
+</html>

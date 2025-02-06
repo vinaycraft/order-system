@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Paratha Order System</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f5f5f5;
+        }
+        .login-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 400px;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 1.5rem;
+        }
+        .form-group {
+            margin-bottom: 1rem;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            color: #666;
+        }
+        input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 0.75rem;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .error-message {
+            color: #ff0000;
+            margin-top: 1rem;
+            text-align: center;
+            display: none;
+        }
+        .register-link {
+            text-align: center;
+            margin-top: 1rem;
+        }
+        .register-link a {
+            color: #4CAF50;
+            text-decoration: none;
+        }
+        .register-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>Login</h1>
+        <form id="loginForm">
+            <div class="form-group">
+                <label for="mobile">Mobile Number:</label>
+                <input type="tel" id="mobile" name="mobile" pattern="[0-9]{10}" title="Please enter a valid 10-digit mobile number" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit">Login</button>
+        </form>
+        <div id="error" class="error-message"></div>
+        <div class="register-link">
+            Don't have an account? <a href="/register.html">Register here</a>
+        </div>
+    </div>
+
+    <script>
+        // Use the correct API URL based on the development server
+        const API_URL = 'http://127.0.0.1:8000/api';
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const errorDiv = document.getElementById('error');
+            errorDiv.style.display = 'none';
+            errorDiv.textContent = '';
+
+            const mobile = document.getElementById('mobile').value;
+            const password = document.getElementById('password').value;
+
+            // Basic validation
+            if (!mobile || mobile.length !== 10 || !/^\d+$/.test(mobile)) {
+                errorDiv.textContent = 'Please enter a valid 10-digit mobile number';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (!password || password.length < 8) {
+                errorDiv.textContent = 'Password must be at least 8 characters long';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_URL}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    body: JSON.stringify({ mobile, password }),
+                    credentials: 'include'
+                });
+
+                const data = await response.json();
+                console.log('Login response:', data);
+
+                if (response.ok && data.status === 'success' && data.token) {
+                    // Store auth data
+                    localStorage.setItem('token', data.token);
+                    localStorage.setItem('user', JSON.stringify(data.user));
+
+                    // Redirect based on role
+                    const user = data.user;
+                    console.log('User role:', user.role);
+                    
+                    if (user && user.role === 'manager' || user.role === 'admin') {
+                        console.log('Redirecting to manager dashboard');
+                        window.location.replace('/manager-dashboard.html');
+                    } else {
+                        console.log('Redirecting to customer dashboard');
+                        window.location.replace('/dashboard.html');
+                    }
+                    return;
+                } else {
+                    throw new Error(data.message || 'Login failed');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                errorDiv.textContent = error.message || 'Failed to login. Please try again.';
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        // Add form submit handler
+        document.getElementById('loginForm').addEventListener('submit', handleLogin);
+    </script>
+</body>
+</html>
